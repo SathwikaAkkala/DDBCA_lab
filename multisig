@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+/// @title MultiSig Wallet
+contract MultiSigWallet {
+    address[] public owners;
+    uint public requiredApprovals;
+
+    struct Transaction {
+        address payable to;
+        uint value;
+        bool executed;
+        uint approvalCount;
+    }
+
+    Transaction[] public transactions;
+    mapping(uint => mapping(address => bool)) public approvals;
+
+    modifier onlyOwner() {
+        bool isOwner = false;
+        for (uint i = 0; i < owners.length; i++) {
+            if (msg.sender == owners[i]) isOwner = true;
+        }
+        require(isOwner, "Not owner");
+        _;
+    }
+        constructor(address[] memory _owners, uint _requiredApprovals) {
+            require(_owners.length >= _requiredApprovals, "Invalid requirement");
+            owners = _owners;
+            requiredApprovals = _requiredApprovals;
+  
+    }
+
+    function submitTransaction(address payable _to, uint _value) public onlyOwner {
+        transactions.push(Transaction({
+            to: _to,
+            value: _value,
+            executed: false,
+            approvalCount: 0
+        }));
+    }
+
+    function approveTransaction(uint _txIndex) public onlyOwner {
+        require(!approvals[_txIndex][msg.sender], "Already approved");
+        Transaction storage txn = transactions[_txIndex];
+        require(!txn.executed, "Already executed");
+
+        approvals[_txIndex][msg.sender] = true;
+        txn.approvalCount++;
+
+        if (txn.approvalCount >= requiredApprovals) {
+            txn.executed = true;
+            txn.to.transfer(txn.value);
+        }
+    }
+
+    receive() external payable {}
+}
+
+/// @title Time-Locked Wallet
+contract TimeLockedWallet {
+    address public owner;
+    uint public unlockTime;
+
+    constructor(uint _unlockTime) {
+        owner = msg.sender;
+        unlockTime = _unlockTime;
+    }
+
+    function withdraw() public {
+        require(msg.sender == owner, "Not owner");
+        require(block.timestamp >= unlockTime, "Too early");
+        payable(owner).transfer(address(this).balance);
+    }
+
+    receive() external payable {}
+}
+
+/// @title Escrow Contract
+contract Escrow {
+    address public buyer;
+    address public seller;
+    address public arbiter;
+    bool public isReleased;
+
+    constructor(address _buyer, address _seller, address _arbiter) {
+        buyer = _buyer;
+        seller = _seller;
+        arbiter = _arbiter;
+    }
+
+    function deposit() public payable {
+        require(msg.sender == buyer, "Only buyer can deposit");
+    }
+
+    function releaseToSeller() public {
+        require(msg.sender == buyer || msg.sender == arbiter, "Not authorized");
+        require(!isReleased, "Already released");
+
+        isReleased = true;
+        payable(seller).transfer(address(this).balance);
+    }
+
+    function refundToBuyer() public {
+        require(msg.sender == seller || msg.sender == arbiter, "Not authorized");
+        require(!isReleased, "Already released");
+
+        isReleased = true;
+        payable(buyer).transfer(address(this).balance);
+    }
+
+    receive() external payable {}
+}
