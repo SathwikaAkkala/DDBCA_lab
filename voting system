@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: MIT 
+pragma solidity ^0.8.20; 
+
+contract VotingSystem { 
+    address public admin; 
+    
+    struct Candidate { 
+        uint id; 
+        string name; 
+        uint voteCount; 
+    } 
+    
+    uint public candidatesCount; 
+    mapping(uint => Candidate) public candidates;
+    mapping(address => bool) public hasVoted; 
+    bool public votingStarted; 
+    bool public votingEnded; 
+    
+    constructor() { 
+        admin = msg.sender; 
+    } 
+    
+    modifier onlyAdmin() { 
+        require(msg.sender == admin, "Only admin can perform this action."); 
+        _; 
+    } 
+    
+    modifier votingActive() { 
+        require(votingStarted && !votingEnded, "Voting is not active."); 
+        _; 
+    } 
+    
+    // Admin adds candidate before voting starts 
+    function addCandidate(string memory _name) public onlyAdmin { 
+        require(!votingStarted, "Can't add candidates after voting starts."); 
+        candidatesCount++; 
+        candidates[candidatesCount] = Candidate(candidatesCount, _name, 0); 
+    } 
+    
+    function startVoting() public onlyAdmin { 
+        require(candidatesCount > 1, "Need at least 2 candidates to start."); 
+        votingStarted = true; 
+        votingEnded = false; 
+    } 
+    
+    function endVoting() public onlyAdmin {
+        votingEnded = true; 
+    } 
+    
+    function vote(uint _candidateId) public votingActive { 
+        require(!hasVoted[msg.sender], "You have already voted."); 
+        require(_candidateId > 0 && _candidateId <= candidatesCount, "Invalid candidate."); 
+        candidates[_candidateId].voteCount++; 
+        hasVoted[msg.sender] = true; 
+    } 
+    
+    function getCandidate(uint _id) public view returns (string memory, uint) { 
+        Candidate memory c = candidates[_id]; 
+        return (c.name, c.voteCount); 
+    } 
+    
+    function getWinner() public view returns (string memory winnerName, uint winnerVotes) { 
+        require(votingEnded, "Voting has not ended yet."); 
+        uint maxVotes = 0; 
+        uint winnerId = 0; 
+        for (uint i = 1; i <= candidatesCount; i++) { 
+            if (candidates[i].voteCount > maxVotes) { 
+                maxVotes = candidates[i].voteCount; 
+                winnerId = i; 
+            } 
+        } 
+        winnerName = candidates[winnerId].name; 
+        winnerVotes = maxVotes; 
+    } 
+}
